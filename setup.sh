@@ -24,7 +24,7 @@ fi
 
 conda update -n base conda
 
-conda env create -f environment.yml
+conda env create -f environment.yml -v
 
 conda env config vars set CUDA_HOME=""
 conda activate ${CONDA_ENV_NAME}

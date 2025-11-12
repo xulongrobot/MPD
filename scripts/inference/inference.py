@@ -1,5 +1,8 @@
 from mpd.utils.patches import numpy_monkey_patch
-numpy_monkey_patch()
+
+import os
+import sys
+
 
 import time
 from functools import partial
@@ -40,7 +43,7 @@ def experiment(
     # cfg_inference_path: str = './cfgs/config_EnvNarrowPassageDense2D-RobotPointMass2D_00.yaml',
     # cfg_inference_path: str = './cfgs/config_EnvPlanar2Link-RobotPlanar2Link_00.yaml',
     # cfg_inference_path: str = './cfgs/config_EnvPlanar4Link-RobotPlanar4Link_00.yaml',
-    cfg_inference_path: str = './cfgs/config_EnvSimple2D-RobotPointMass2D_00.yaml',
+    cfg_inference_path: str = "./cfgs/config_EnvSimple2D-RobotPointMass2D_00_mutil.yaml",
     # cfg_inference_path: str = './cfgs/config_EnvSpheres3D-RobotPanda_00.yaml',
     # cfg_inference_path: str = "./cfgs/config_EnvWarehouse-RobotPanda-config_file_v01_00.yaml",
     ########################################################################
@@ -48,15 +51,15 @@ def experiment(
     selection_start_goal: str = "validation",  # training, validation/test
     ########################################################################
     # number of start and goal states to evaluate
-    n_start_goal_states: int = 1,
+    n_start_goal_states: int = 100,  # 评估的起点和终点数量
     ########################################################################
     save_results_single_plan_low_mem: bool = False,
     ########################################################################
     # Visualization options
-    render_joint_space_time_iters: bool = True,
-    render_joint_space_env_iters: bool = False,
+    render_joint_space_time_iters: bool = False,  # 渲染关节空间中的时间轨迹
+    render_joint_space_env_iters: bool = False,  # 渲染关节空间中的环境轨迹
     render_env_robot_opt_iters: bool = False,
-    render_env_robot_trajectories: bool = False,
+    render_env_robot_trajectories: bool = False,  # 渲染规划环境中的机器人轨迹
     render_pybullet: bool = False,
     draw_collision_spheres: bool = False,
     run_evaluation_issac_gym: bool = False,
@@ -68,7 +71,7 @@ def experiment(
     ########################################################################
     # MANDATORY
     # seed: int = int(time.time()),
-    seed: int = 2,
+    seed: int = 1,
     results_dir: str = "logs",
     ########################################################################
     **kwargs,
@@ -166,6 +169,7 @@ def experiment(
             num_envs=args_inference.n_trajectory_samples,
             # all_robots_in_one_env=True if n_start_goal_states == 1 else False,
             all_robots_in_one_env=True,
+            use_gpu_pipeline=False,  # Disable GPU pipeline to avoid API compatibility issues
             render_isaacgym_viewer=render_isaacgym_viewer,
             render_camera_global=render_isaacgym_movie,
             render_camera_global_append_to_recorder=render_isaacgym_movie,
@@ -188,8 +192,13 @@ def experiment(
     # Metrics calculator
     planning_metrics_calculator = PlanningMetricsCalculator(planning_task)
 
+    all_success_rate = []
+    all_path_length = []
+    all_valid_fraction = []
+    all_diversity = []
+    all_smoothness = []
     ################################################################################################################
-    # Plan for several start and goal states sequentially
+    # Plan for several start and goal states sequentially    推理主循环
     if selection_start_goal == "training":
         idx_sample_l = np.random.choice(np.arange(len(train_subset)), n_start_goal_states)
     else:
@@ -197,11 +206,13 @@ def experiment(
     for idx_sg, idx_sample in enumerate(idx_sample_l):
         print(f"\n-------------------------------------------------------------------------------------------------")
         print(f"----------------PLANNING {idx_sg+1}/{n_start_goal_states}------------------")
-        print(f"--------------------------------------------------------------------------------------------------")
+        print(f"-------------------------m-------------------------------------------------------------------------")
 
         results_single_plan = DotMap(t_generator=0.0, t_guide=0.0)
 
-        q_pos_start, q_pos_goal, ee_pose_goal = evaluation_samples_generator.get_data_sample(idx_sg)
+        q_pos_start, q_pos_goal, ee_pose_goal, environment_obj_list = evaluation_samples_generator.get_data_sample(
+            idx_sg
+        )
 
         print("\n----------------START AND GOAL states----------------")
         print(f"q_pos_start: {q_pos_start}")
@@ -215,11 +226,13 @@ def experiment(
         # Run motion planning inference
         print(f"\n----------------PLAN TRAJECTORIES----------------")
         print(f"Starting inference...")
+        t_start = time.time()
         results_single_plan = generative_optimization_planner.plan_trajectory(
-            q_pos_start, q_pos_goal, ee_pose_goal, results_ns=results_single_plan, debug=debug
+            q_pos_start, q_pos_goal, ee_pose_goal, environment_obj_list, results_ns=results_single_plan, debug=debug
         )
+        t_end = time.time()
         print(f"...inference finished.")
-
+        print(f"Time taken for inference: {t_end - t_start:.2f} seconds")
         ############################################################################################################
         # Show in pybullet the best trajectory
         if render_pybullet and results_single_plan.q_trajs_pos_best is not None:
@@ -234,9 +247,9 @@ def experiment(
                 and evaluation_samples_generator.generate_data_ompl_worker.pbompl_interface.robot.num_dim == 9
             ):
                 q_pos_path = np.concatenate((q_pos_path, np.zeros((q_pos_path.shape[0], 2))), axis=-1)
-            evaluation_samples_generator.generate_data_ompl_worker.pbompl_interface.execute(
-                q_pos_path, sleep_time=planning_task.parametric_trajectory.dt
-            )
+            # Calculate dt from trajectory duration and number of points
+            dt = planning_task.parametric_trajectory.trajectory_duration / planning_task.parametric_trajectory.num_T_pts
+            evaluation_samples_generator.generate_data_ompl_worker.pbompl_interface.execute(q_pos_path, sleep_time=dt)
 
         ############################################################################################################
         # Evaluate and show in IsaacGym
@@ -278,6 +291,18 @@ def experiment(
 
         print(f"metrics:")
         pprint(results_single_plan.metrics)
+
+        def safe_value(val, default=0):
+            # Replace NaN or None with default value
+            if val is None or np.isnan(val).any():
+                return default
+            return val
+
+        all_success_rate.append(safe_value(results_single_plan.metrics.trajs_all.success, 0))
+        all_path_length.append(safe_value(results_single_plan.metrics.trajs_valid.path_length_mean, 0))
+        all_valid_fraction.append(safe_value(results_single_plan.metrics.trajs_all.fraction_valid, 0))
+        all_diversity.append(safe_value(results_single_plan.metrics.trajs_valid.diversity, 0))
+        all_smoothness.append(safe_value(results_single_plan.metrics.trajs_valid.smoothness_mean, 0))
 
         # Save data
         results_single_plan_to_save = results_single_plan
@@ -323,6 +348,13 @@ def experiment(
         torch.cuda.empty_cache()
 
     ################################################################################################################
+
+    print(f"mean_success_rate: {np.mean(all_success_rate)}")
+    print(f"mean_path_length: {np.mean(all_path_length)}")
+    print(f"mean_valid_fraction: {np.mean(all_valid_fraction)}")
+    print(f"mean_diversity: {np.mean(all_diversity)}")
+    print(f"mean_smoothness: {np.mean(all_smoothness)}")
+
     # clean up
     evaluation_samples_generator.generate_data_ompl_worker.terminate()
     if motion_planning_isaac_env is not None:

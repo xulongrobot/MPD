@@ -10,6 +10,7 @@ from xml.etree import ElementTree as ET
 import h5py
 import numpy as np
 import pybullet as p
+from sympy.core import parameters
 import torch
 import yaml
 from joblib import Parallel, delayed
@@ -27,6 +28,9 @@ from torch_robotics.torch_utils.torch_timer import TimerCUDA
 from torch_robotics.torch_utils.torch_utils import to_numpy, DEFAULT_TENSOR_ARGS
 
 from scipy.spatial.transform import Rotation
+
+
+import argparse
 
 
 class GenerateDataOMPL:
@@ -430,13 +434,25 @@ def generate_trajectories_run(
     return results_dict
 
 
+def get_environment_obj_list(env_tr):
+    # Given a set of ObjectFields (each ObjectField is a collection of MultiSphereFields), convert to a Nx3 matrix:
+    # Each row: [center_x, center_y, radius]
+
+    # INSERT_YOUR_CODE
+    # If env_tr.obstacle_points_list is a torch tensor, convert it to numpy
+    if hasattr(env_tr, "obstacle_points_list") and hasattr(env_tr.obstacle_points_list, "cpu"):
+        return env_tr.obstacle_points_list.cpu().numpy()
+
+    return env_tr.obstacle_points_list
+
+
 @single_experiment_yaml
 def experiment(
     ############################################################################
     # env_id: str = 'EnvDense2D',
-    # env_id: str = 'EnvSimple2D',
+    env_id: str = "EnvSimple2D",
     # env_id: str = 'EnvNarrowPassageDense2D',
-    # robot_id: str = 'RobotPointMass2D',
+    robot_id: str = "RobotPointMass2D",
     # env_id: str = 'EnvPlanar2Link',
     # robot_id: str = 'RobotPlanar2Link',
     # env_id: str = 'EnvPlanar4Link',
@@ -446,12 +462,12 @@ def experiment(
     # env_id: str = 'EnvTableShelf',
     # env_id: str = 'EnvPilars3D',
     # robot_id: str = 'RobotPanda',
-    env_id: str = "EnvWarehouse",
-    robot_id: str = "RobotPanda",
+    # env_id: str = "EnvWarehouse",
+    # robot_id: str = "RobotPanda",
     ############################################################################
-    start_task_id: int = 49400,
-    num_tasks: int = 5,
-    num_trajectories_per_task: int = 1,
+    start_task_id: int = 10000 * 5,  # 数据记录开始ID
+    num_tasks: int = 500,
+    num_trajectories_per_task: int = 20,
     ############################################################################
     sample_joint_position_goals_with_same_ee_pose: bool = False,
     cfg_file: str = "None",
@@ -481,7 +497,7 @@ def experiment(
     #######################################
     n_parallel_jobs: int = 1,  # Set to 1 to debug with pybullet GUI
     # n_parallel_jobs: int = os.cpu_count(),
-    debug: bool = True,
+    debug: bool = False,
     #######################################
     # MANDATORY
     seed: int = int(time.time()),
@@ -634,6 +650,10 @@ def experiment(
     # Merge results for hdf5 format
     results_dict = {}
     num_trajectories_generated = 0
+
+    obj_list = get_environment_obj_list(generate_data_ompl_worker.env_tr)
+    results_dict["environment_obj_list"] = []
+    print(f"results_dict_l: {results_dict_l}")
     for results_dict_run in results_dict_l:
         # drop if no trajectory was generated
         if len(results_dict_run) == 0:
@@ -661,6 +681,7 @@ def experiment(
                     results_dict[kk].append(vv)
                 else:
                     results_dict[kk] = [vv]
+            results_dict["environment_obj_list"].append(obj_list)
 
     print("\n\n------------------------------------------------------------")
     num_trajectories_desired = num_tasks * num_trajectories_per_task
@@ -668,6 +689,9 @@ def experiment(
         f"Generated {num_trajectories_generated}/{num_trajectories_desired} trajectories"
         f" in {t_generate_data.elapsed:.3f} s"
     )
+    # print(f"results_dict: {results_dict}")
+
+    print(f"results_dir: {results_dir}")
 
     # save results to disk
     hf = h5py.File(os.path.join(results_dir, "dataset.hdf5"), "w")

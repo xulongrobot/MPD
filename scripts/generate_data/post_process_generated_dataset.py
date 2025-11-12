@@ -1,4 +1,4 @@
-import isaacgym
+# import isaacgym
 import argparse
 import glob
 import os.path

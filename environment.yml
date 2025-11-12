@@ -93,7 +93,6 @@ dependencies:
   - pandas==2.0.3
   - paramz==0.9.6
   - pathspec==0.12.1
-#  - -e ./deps/pybullet_ompl
   - pin==2.7.0
   - plotly==5.22.0
   - pre-commit==3.5.0

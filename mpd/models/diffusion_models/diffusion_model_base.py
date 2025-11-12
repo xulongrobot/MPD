@@ -447,6 +447,13 @@ class GaussianDiffusionModel(nn.Module, ABC):
         return sample
 
     def p_losses(self, x_start, context_d, t, hard_conds):
+        """
+        x_start: [batch_size, horizon, state_dim]
+        context_d: dict   dict_keys(['control_points', 'q_start', 'q_goal', 'qs', 'ee_goal_pose', 'ee_goal_orientation', 'ee_goal_position', 'control_points_normalized', 'qs_normalized', 'ee_goal_orientation_normalized', 'ee_goal_position_normalized', 'hard_conds'])
+        t: [batch_size]
+        hard_conds: dict
+        """
+
         noise = torch.randn_like(x_start)
 
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)

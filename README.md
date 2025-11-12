@@ -120,7 +120,10 @@ python train.py
 
 To train multiple models in parallel, use the `launch_train_*` files.
 
+echo "/home/ps/桌面/Projects/neuralmotionplanner/ompl-1.5.2/py-bindings" >> ~/miniconda3/envs/mpd-splines-public/lib/python3.8/site-packages/ompl.pth
 
+
+cmake -DCMAKE_DISABLE_FIND_PACKAGE_pypy=ON ../.. -DPYTHON_EXEC=${HOME}/miniconda3/envs/mpd-splines-public/bin/python
 ---
 ## Citation
 

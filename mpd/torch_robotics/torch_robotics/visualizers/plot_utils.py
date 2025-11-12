@@ -89,7 +89,7 @@ def create_animation_video(
     print(f"...finished {str_start}")
 
     str_start = "Saving video"
-    print(f"{str_start}...")
+    print(f"{str_start}...", video_filepath)
     ani.save(os.path.join(video_filepath), fps=max(1, int(n_frames / anim_time)), dpi=dpi)
     print(f"...finished {str_start}")
 

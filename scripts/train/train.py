@@ -1,5 +1,3 @@
-import isaacgym
-
 import os
 
 import torch
@@ -17,19 +15,19 @@ from torch_robotics.torch_utils.torch_utils import get_torch_device
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 
 
-os.environ["WANDB_API_KEY"] = "999"
-WANDB_MODE = "disabled"
-WANDB_ENTITY = "mpd-splines"
-DEBUG = True
+os.environ["WANDB_API_KEY"] = "a13a69e5d05ef62980c6289cecd0928050065be8"
+WANDB_MODE = "online"
+WANDB_ENTITY = "xulong187-shenzhen-technology-university-business-school"
+DEBUG = False
 
 
 @single_experiment_yaml
 def experiment(
     ########################################################################
     # Dataset
-    dataset_subdir: str = "EnvSimple2D-RobotPointMass2D-joint_joint-one-RRTConnect",
+    dataset_subdir: str = "EnvSimple2D-RobotPointMass2D-joint_joint-one-RRTConnect-mutilenv",
     # dataset_subdir: str = 'EnvWarehouse-RobotPanda-config_file_v01-joint_joint-one-RRTConnect',
-    dataset_file_merged: str = "dataset_merged_doubled.hdf5",
+    dataset_file_merged: str = "dataset_merged.hdf5",
     reload_data: bool = False,
     preload_data_to_device: bool = False,
     n_task_samples: int = -1,  # -1 for all
@@ -61,7 +59,7 @@ def experiment(
     variance_schedule: str = "cosine",
     n_diffusion_steps: int = 100,
     predict_epsilon: bool = True,
-    conditioning_type: str = "default",  # 'default', 'concatenate', 'attention'
+    conditioning_type: str = "attention",  # 'default', 'concatenate', 'attention'
     # Unet
     unet_input_dim: int = 32,
     unet_dim_mults_option: int = 1,
@@ -73,7 +71,7 @@ def experiment(
     batch_size: int = 128,
     lr: float = 3e-4,
     clip_grad: bool = False,
-    num_train_steps: int = 1_000_000,
+    num_train_steps: int = 2_000_000,
     use_ema: bool = True,
     use_amp: bool = False,
     # Summary parameters
@@ -86,13 +84,13 @@ def experiment(
     ########################################################################
     # MANDATORY
     # seed: int = int(time.time()),
-    seed: int = 1726484688,
-    results_dir: str = "logs",
+    seed: int = 1726484688,  # 根据随机种子生成保存的模型文件名
+    results_dir: str = "context_attention",
     ########################################################################
     # WandB
     wandb_mode: str = "disabled" if DEBUG else WANDB_MODE,  # "online", "offline" or "disabled"
     wandb_entity: str = WANDB_ENTITY,
-    wandb_project: str = "test_train_bspline_diffusion",
+    wandb_project: str = "MPD",
     **kwargs,
 ):
     print()
@@ -126,6 +124,9 @@ def experiment(
         save_indices=True,
         tensor_args=tensor_args,
     )
+
+    print(f"train_subset: {len(train_subset)}")
+    print(f"val_subset: {len(val_subset)}")
 
     full_dataset = train_subset.dataset
 

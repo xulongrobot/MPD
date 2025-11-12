@@ -1,11 +1,11 @@
-import isaacgym
-
 from functools import partial
 from typing import Tuple
 
 
 import einops
 import numpy as np
+
+# import isaacgym
 import torch
 
 from matplotlib import pyplot as plt

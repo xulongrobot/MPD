@@ -96,9 +96,12 @@ class EvaluationSamplesGenerator:
         else:
             idx = self.idxs_dataset_subset[idx % len(self.idxs_dataset_subset)]
             input_data_one_sample = self.dataset_subset[idx]
+
+            print(f"input_data_one_sample: {input_data_one_sample.keys()}")
             q_pos_start = input_data_one_sample[self.dataset_subset.dataset.field_key_q_start]
             q_pos_goal = input_data_one_sample[self.dataset_subset.dataset.field_key_q_goal]
             ee_pose_goal = input_data_one_sample[self.dataset_subset.dataset.field_key_context_ee_goal_pose]
+            environment_obj_list = input_data_one_sample[self.dataset_subset.dataset.field_key_environment_obj_list]
 
         if not self.generate_data_ompl_worker.pbompl_interface.is_state_valid(to_numpy(q_pos_start)):
             print("Start state is in collision. Getting new sample...")
@@ -117,7 +120,7 @@ class EvaluationSamplesGenerator:
 
         ee_pose_goal = to_torch(ee_pose_goal, **self.tensor_args)
 
-        return q_pos_start, q_pos_goal, ee_pose_goal
+        return q_pos_start, q_pos_goal, ee_pose_goal, environment_obj_list
 
     def add_start_goal_marker(self, q_pos_start, q_pos_goal=None, ee_pose_goal=None, **kwargs):
         # remove markers first
@@ -320,6 +323,10 @@ class GenerativeOptimizationPlanner:
             args_inference.model_dir, "checkpoints", f'{"ema_" if args_train["use_ema"] else ""}model_current.pth'
         )
         self.model = torch.load(model_path, map_location=tensor_args["device"])
+        # 确保模型的所有参数都在正确的设备上
+        if isinstance(self.model, torch.nn.DataParallel):
+            self.model = self.model.module
+        self.model = self.model.to(tensor_args["device"])
         self.model.eval()
         freeze_torch_model_params(self.model)
 
@@ -383,6 +390,7 @@ class GenerativeOptimizationPlanner:
         q_pos_start,
         q_pos_goal,
         EE_pose_goal,
+        environment_obj_list=None,
         n_trajectory_samples=None,
         results_ns: DotMap = None,
         debug=False,
@@ -400,6 +408,7 @@ class GenerativeOptimizationPlanner:
         q_pos_start = to_torch(q_pos_start, **self.tensor_args)
         q_pos_goal = to_torch(q_pos_goal, **self.tensor_args)
         ee_pose_goal = to_torch(EE_pose_goal, **self.tensor_args)
+        environment_obj_list = to_torch(environment_obj_list, **self.tensor_args)
 
         results_ns.update(
             q_pos_start=q_pos_start,
@@ -418,9 +427,12 @@ class GenerativeOptimizationPlanner:
             q_pos_goal,
             ee_pose_goal=ee_pose_goal,
         )
+        input_data_one_sample[self.dataset.field_key_environment_obj_list] = environment_obj_list  # 加入环境对象列表
         input_data_one_sample = dict_to_device(input_data_one_sample, self.tensor_args["device"])
         hard_conds = input_data_one_sample["hard_conds"]
         context_d = self.dataset.build_context(input_data_one_sample)
+
+        print(f"{'=' * 80}\nplanner_alg: {self.args_inference.planner_alg}\n{'=' * 80}")
 
         with TimerCUDA() as t_inference_total:
             control_points_recon_normalized_iters = None

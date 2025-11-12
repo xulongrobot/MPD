@@ -2,13 +2,14 @@ from typing import Tuple
 
 from matplotlib import pyplot as plt
 
-import isaacgym
+
 from functools import partial
 
 import einops
 import numpy as np
 import torch
 
+# import isaacgym
 from mpd.parametric_trajectory.trajectory_base import ParametricTrajectoryBase
 from mpd.parametric_trajectory.phase_time import PhaseTimeLinear, PhaseTimeSigmoid
 from torch_robotics.torch_utils.torch_utils import DEFAULT_TENSOR_ARGS

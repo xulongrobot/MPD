@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-
+import numpy as np
 from mpd.models.layers.layers import MLP
+from mpd.models.diffusion_models.pointnet import PointNet
 
 
 class ContextModelEEPoseGoal(nn.Module):
@@ -37,6 +38,23 @@ class ContextModelQs(nn.Module):
         return emb
 
 
+class ContextModelENV(nn.Module):
+    def __init__(self, in_dim=45, out_dim=64, **kwargs):
+        super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.pointnet = PointNet(out_dim)
+
+    def forward(self, environment_obj_list=None, **kwargs):
+        """
+        environment_obj_list: [batch_size, N_obstacles, 3] -> [batch_size, N_obstacles * 3]
+        """
+
+        # print(f"environment_obj_list: {environment_obj_list.shape}")
+        x, pos = self.pointnet(environment_obj_list)
+        return x
+
+
 class ContextModelCombined(nn.Module):
 
     def __init__(
@@ -44,6 +62,8 @@ class ContextModelCombined(nn.Module):
     ):
         assert not (context_model_qs is None and context_model_ee_pose_goal is None)
         super().__init__()
+
+        self.env_flag = False  # 是否使用环境模型加入感知信息，False则不加入
 
         self.context_model_qs = context_model_qs
         self.context_model_ee_pose_goal = context_model_ee_pose_goal
@@ -54,11 +74,19 @@ class ContextModelCombined(nn.Module):
         if self.context_model_ee_pose_goal is not None:
             self.in_dim += self.context_model_ee_pose_goal.out_dim
 
+        self.context_model_env = ContextModelENV()
+        self.in_dim += self.context_model_env.out_dim
+
         self.out_dim = out_dim
         self.net = MLP(self.in_dim, self.out_dim, hidden_dim=out_dim, n_layers=n_layers, act=act)
 
     def forward(
-        self, qs_normalized=None, ee_goal_orientation_normalized=None, ee_goal_position_normalized=None, **kwargs
+        self,
+        qs_normalized=None,
+        ee_goal_orientation_normalized=None,
+        ee_goal_position_normalized=None,
+        environment_obj_list=None,
+        **kwargs,
     ):
         emb_q = None
         if self.context_model_qs is not None:
@@ -76,6 +104,15 @@ class ContextModelCombined(nn.Module):
             emb = emb_q
         elif emb_ee_goal_pose is not None:
             emb = emb_ee_goal_pose
+
+        ### 评估时固定场景的障碍物点云
+        # environment_obj_list = torch.load("/home/ps/桌面/Projects/mpd-splines-public/mpd/torch_robotics/torch_robotics/environments/obstacle_points_list.pt")
+        # environment_obj_list = environment_obj_list.unsqueeze(0)
+        # environment_obj_list = environment_obj_list.repeat(emb.shape[0], 1, 1)
+
+        # print(f"environment_obj_list: {environment_obj_list.shape}")
+        emb_env = self.context_model_env(environment_obj_list)
+        emb = torch.cat((emb, emb_env), dim=-1)
 
         context_emb = self.net(emb)
         return context_emb

@@ -97,6 +97,7 @@ class TrajectoryDatasetBspline(Dataset, abc.ABC):
         self.field_key_context_ee_goal_pose = "ee_goal_pose"
         self.field_key_context_ee_goal_orientation = "ee_goal_orientation"
         self.field_key_context_ee_goal_position = "ee_goal_position"
+        self.field_key_environment_obj_list = "environment_obj_list"
         self.fields = {}
 
         # ------------ load data ------------
@@ -171,6 +172,10 @@ class TrajectoryDatasetBspline(Dataset, abc.ABC):
 
     def load_data(self, n_task_samples=-1):
         # load data into CPU RAM
+
+        print("=" * 100)
+        print(f"Loading data ...")
+        print("=" * 100)
         with TimerCUDA() as t_load_data:
             print(f"Loading data ...")
 
@@ -186,15 +191,18 @@ class TrajectoryDatasetBspline(Dataset, abc.ABC):
 
             if os.path.exists(data_reload_file_path) and not self.reload_data:
                 # load the pre-processed dataset
+                print(f"Loading pre-processed dataset from {data_reload_file_path} ...")
                 self.reload_data_fn(data_reload_file_path, n_task_samples=n_task_samples)
             else:
                 # load dataset file
+                print(f"Loading dataset from {os.path.join(self.base_dir, self.dataset_file_merged)} ...")
                 dataset_h5 = h5py.File(os.path.join(self.base_dir, self.dataset_file_merged), "r")
 
                 # load trajectories
                 inner_control_points_all = []
                 q_start_all = []
                 q_goal_all = []
+                env_obj_list_all = []
 
                 task_ids_processed = []
                 # fit a bspline to each path
@@ -280,12 +288,22 @@ class TrajectoryDatasetBspline(Dataset, abc.ABC):
                             f'loaded {i}/{len(dataset_h5["sol_path"])} '
                             f'({i/len(dataset_h5["sol_path"]):.2%}) trajectories.'
                         )
+                        # Load environment_obj_list if available
+
+                    if "environment_obj_list" in dataset_h5:
+                        env_obj_list_data = dataset_h5["environment_obj_list"][i]
+                        env_obj_list_tensor = to_torch(
+                            np.array(env_obj_list_data), dtype=self.tensor_args["dtype"], device="cpu"
+                        )
+                        env_obj_list_all.append(env_obj_list_tensor)
 
                 print(f'Number of discarded trajectories: {n_discarded_trajectories}/{len(dataset_h5["sol_path"])}')
 
                 # learnable inner control points
                 inner_control_points_tensor = torch.stack(inner_control_points_all)
                 self.fields[self.field_key_control_points] = inner_control_points_tensor
+
+                self.fields[self.field_key_environment_obj_list] = torch.stack(env_obj_list_all)
 
                 # update fields for all samples
                 self.fields = self.build_fields_data_sample(
@@ -310,6 +328,7 @@ class TrajectoryDatasetBspline(Dataset, abc.ABC):
 
             print("... done loading data.")
             print(f"Loading data took {t_load_data.elapsed:.2f} seconds.")
+            print("=" * 100)
 
     def build_fields_data_sample(self, fields_d, q_start, q_goal, ee_pose_goal=None, device=None, **kwargs):
         fields_d[self.field_key_q_start] = q_start
@@ -419,6 +438,7 @@ class TrajectoryDatasetBspline(Dataset, abc.ABC):
         return hard_conds
 
     def build_context(self, data_sample):
+        # print(f"data_sample: {data_sample.keys()}")
         context_d = {}
         if self.context_qs and self.context_ee_goal_pose:
             context_d = {
@@ -441,7 +461,7 @@ class TrajectoryDatasetBspline(Dataset, abc.ABC):
             }
         elif self.context_ee_goal_pose:
             context_d = {
-                self.field_key_context_ee_goal_pose: data_sample[self.field_key_context_ee_goal_pose],
+                self.field_keyDataset_context_ee_goal_pose: data_sample[self.field_key_context_ee_goal_pose],
                 self.field_key_context_ee_goal_orientation: data_sample[self.field_key_context_ee_goal_orientation],
                 f"{self.field_key_context_ee_goal_orientation}_normalized": data_sample[
                     f"{self.field_key_context_ee_goal_orientation}_normalized"
@@ -451,6 +471,13 @@ class TrajectoryDatasetBspline(Dataset, abc.ABC):
                     f"{self.field_key_context_ee_goal_position}_normalized"
                 ],
             }
+
+        # print(f"data_sample: {data_sample.keys()}")
+        # Add environment_obj_list if available
+        if self.field_key_environment_obj_list in data_sample:
+            context_d[self.field_key_environment_obj_list] = data_sample[self.field_key_environment_obj_list]
+            # print(f"context_d[self.field_key_environment_obj_list]: {context_d[self.field_key_environment_obj_list].shape}")
+
         return context_d
 
     def get_unnormalized(self, index):

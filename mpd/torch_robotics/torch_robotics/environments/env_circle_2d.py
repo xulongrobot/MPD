@@ -23,7 +23,7 @@ class EnvCircle2D(EnvBase):
                 ),
                 np.array(
                     [
-                        0.3,
+                        0.4,
                     ]
                 ),
                 tensor_args=tensor_args,

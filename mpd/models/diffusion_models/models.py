@@ -163,6 +163,8 @@ class TemporalUnet(nn.Module):
         """
         b, h, d = x.shape
 
+        # print("x shape", x.shape, time.shape, context.shape)
+
         t_emb = self.time_mlp(time)
         c_emb = t_emb
         if self.conditioning_type == "concatenate":
@@ -186,6 +188,7 @@ class TemporalUnet(nn.Module):
             x = resnet2(x, c_emb)
             x = attn_self(x)
             if self.conditioning_type == "attention":
+                # print(f"=============attention_conditioning===========================")
                 x = attn_conditioning(x, context=context)
             h.append(x)
             x = downsample(x)

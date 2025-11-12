@@ -64,7 +64,7 @@ single_experiment_params_base_l = [
     ),
     # EnvNarrowPassageDense2D-RobotPointMass2D
     OrderedDict(
-        dataset_subdir__="EnvNarrowPassageDense2D-RobotPointMass2D-joint_joint-one-RRTConnect",
+        dataset_subdir__="EnvNarrowPassageDense2D-Rearly_stopper_patienceobotPointMass2D-joint_joint-one-RRTConnect",
         context_ee_goal_pose__=False,
         batch_size=128,
         num_train_steps=2_000_000,
