@@ -53,7 +53,7 @@ best_trajectory_selection: 'shortest_path_length'
 #######################################################################################################################
 # Planner options
 
-planner_alg: 'diffusion_prior'  # diffusion_prior, diffusion_prior_then_guide, mpd, gp_prior_then_guide, knn_prior_then_guide, cvae, cvae_prior_then_guide, rrtconnect_then_guide
+planner_alg: 'diffusion_prior_then_guide'  # diffusion_prior, diffusion_prior_then_guide, mpd, gp_prior_then_guide, knn_prior_then_guide, cvae, cvae_prior_then_guide, rrtconnect_then_guide
 
 diffusion_sampling_method: 'ddim'  # ddim, ddpm (not tuned)
 

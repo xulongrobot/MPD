@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 
 from experiment_launcher import single_experiment_yaml, run_experiment
 from mpd import trainer
-from mpd.models import UNET_DIM_MULTS, TemporalUnet
+from mpd.models import UNET_DIM_MULTS, TemporalUnet, PlaningDiT
 from mpd.models.diffusion_models.context_models import ContextModelQs, ContextModelEEPoseGoal, ContextModelCombined
 from mpd.trainer.trainer import get_num_epochs
 from mpd.utils.loaders import get_planning_task_and_dataset, get_model, get_loss, get_summary
@@ -51,7 +51,7 @@ def experiment(
     context_ee_goal_pose_out_dim: int = 128,
     context_ee_goal_pose_act: str = "relu",
     # Combined context model
-    context_combined_out_dim: int = 128,
+    context_combined_out_dim: int = 64,
     ########################################################################
     # Generative prior model
     generative_model_class: str = "GaussianDiffusionModel",  # 'GaussianDiffusionModel', 'CVAEModel'
@@ -59,7 +59,7 @@ def experiment(
     variance_schedule: str = "cosine",
     n_diffusion_steps: int = 100,
     predict_epsilon: bool = True,
-    conditioning_type: str = "attention",  # 'default', 'concatenate', 'attention'
+    conditioning_type: str = "default",  # 'default', 'concatenate', 'attention'
     # Unet
     unet_input_dim: int = 32,
     unet_dim_mults_option: int = 1,
@@ -185,9 +185,12 @@ def experiment(
         conditioning_embed_dim=context_model.out_dim if context_model is not None else None,
     )
 
+
+    print("unet_configs", unet_configs)
+
     model = get_model(
         model_class=generative_model_class,
-        denoise_fn=TemporalUnet(**unet_configs),
+        denoise_fn=PlaningDiT(state_dim=full_dataset.state_dim),
         context_model=context_model,
         tensor_args=tensor_args,
         **cvae_configs,
